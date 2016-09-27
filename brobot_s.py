@@ -3,9 +3,20 @@ from __future__ import unicode_literals
 import time
 from threading import Thread
 import random
+import logging
 
 from selenium import webdriver
 from selenium.common.exceptions import NoSuchElementException, ElementNotVisibleException
+
+
+FORMAT = '%(asctime)-15s|%(levelname)s|%(name)s|%(threadName)s|%(filename)s:%(lineno)d|%(funcName)s|%(message)s'
+logging.basicConfig(format=FORMAT)
+
+
+class Config(object):
+
+    MAX_THREAD_NUM = 2
+    TARGET_URL = 'http://www.autohome.com.cn/692/'
 
 
 class AutoHomeRobot(Thread):
@@ -26,14 +37,19 @@ class AutoHomeRobot(Thread):
         ('论坛', 'parse_forum'),
     ]
 
+    BROWSER_NAME = 'phantomjs'
+
     def __init__(self, start_url, *args, **kwargs):
         super(AutoHomeRobot, self).__init__(*args, **kwargs)
         self.start_url = start_url
+        self.logger = logging.getLogger('AutoHomeRobot')
+        self.logger.setLevel(logging.DEBUG)
 
     def init_driver(self):
         self.driver = webdriver.Remote(
             command_executor='http://127.0.0.1:4444/wd/hub', 
-            desired_capabilities=webdriver.DesiredCapabilities.CHROME.copy()
+            # desired_capabilities=webdriver.DesiredCapabilities.CHROME.copy(),
+            desired_capabilities=getattr(webdriver.DesiredCapabilities, self.BROWSER_NAME.upper()).copy(),
         )
         # self.driver.implicitly_wait(10)
         self.driver.get(self.start_url)
@@ -48,32 +64,72 @@ class AutoHomeRobot(Thread):
         self.parse_home()
         self.fini_driver()
 
+    def parse_home(self):
+        self.logger.debug(self.driver.current_url) 
+        xpath_template = '//li[@class="nav-item"]/a[text()="{nav}"]'
+
+        for nav, parser in self.NAV_PARSER_MAP:
+            try:
+                elem = self.driver.find_element_by_xpath(xpath_template.format(nav=nav))
+            except NoSuchElementException as e:
+                self.logger.error('{NoSuchElementException, nav=<{0}>, parser=<{1}>'.format(nav, parser))
+            parse_method = getattr(self, parser)
+            self._click_element(elem, parse_method)
+
+    def parse_forum(self, page=1):
+        # print self.driver.title
+        self.logger.debug(self.driver.current_url) 
+
+        # 限制最大访问的页面数
+        if page > self.MAX_FORUM_PAGE:
+            return
+
+        # 获取所有帖子链接
+        elems = self.driver.find_elements_by_xpath('//a[@class="a_topic"]')
+        forum_window_handle = self.driver.current_window_handle
+        for elem in elems:
+            # 访问帖子
+            self._click_element(elem, self.parse_thread)
+
+        # 达到最后一页
+        try:
+            elem = self.driver.find_element_by_xpath('//a[@class="afpage"]')
+        except NoSuchElementException:
+            return
+
+        # 访问下一页
+        self._click_element(elem, self.parse_forum, page+1)
+
+    def parse_thread(self):
+        self.logger.debug(self.driver.current_url) 
+        # print self.driver.title
+
     def parse_config(self):
-        pass
+        self.logger.debug(self.driver.current_url) 
 
     def parse_picture(self):
-        pass
+        self.logger.debug(self.driver.current_url) 
 
     def parse_price(self):
-        pass
+        self.logger.debug(self.driver.current_url) 
 
     def parse_koubei(self):
-        pass
+        self.logger.debug(self.driver.current_url) 
 
     def parse_detail(self):
-        pass
+        self.logger.debug(self.driver.current_url) 
     
     def parse_topic(self):
-        pass
+        self.logger.debug(self.driver.current_url) 
 
     def parse_video(self):
-        pass
+        self.logger.debug(self.driver.current_url) 
 
     def parse_used(self):
-        pass
+        self.logger.debug(self.driver.current_url) 
 
     def parse_question(self):
-        pass
+        self.logger.debug(self.driver.current_url) 
 
     def _random_sleep(self, x=5, y=10):
         i = random.randint(x, y)
@@ -101,54 +157,14 @@ class AutoHomeRobot(Thread):
             self.driver.close()
             self.driver.switch_to.window(parent_window_handle)
 
-    def parse_home(self):
-        xpath_template = '//li[@class="nav-item"]/a[text()="{nav}"]'
-
-        for nav, parser in self.NAV_PARSER_MAP:
-            try:
-                elem = self.driver.find_element_by_xpath(xpath_template.format(nav=nav))
-            except NoSuchElementException as e:
-                print e, 'nav=<{0}>, parser=<{1}>'.format(nav, parser)
-            parse_method = getattr(self, parser)
-            self._click_element(elem, parse_method)
-
-
-    def parse_forum(self, page=1):
-        # print self.driver.title
-        # print self.driver.current_url
-
-        # 限制最大访问的页面数
-        if page > self.MAX_FORUM_PAGE:
-            return
-
-        # 获取所有帖子链接
-        elems = self.driver.find_elements_by_xpath('//a[@class="a_topic"]')
-        forum_window_handle = self.driver.current_window_handle
-        for elem in elems:
-            # 访问帖子
-            self._click_element(elem, self.parse_thread)
-
-        # 达到最后一页
-        try:
-            elem = self.driver.find_element_by_xpath('//a[@class="afpage"]')
-        except NoSuchElementException:
-            return
-
-        # 访问下一页
-        self._click_element(elem, self.parse_forum, page+1)
-
-    def parse_thread(self):
-        print self.driver.title
-
-
-MAX_THREAD_NUM = 2
-target_url = 'http://www.autohome.com.cn/692/'
-
 
 if __name__ == '__main__':
+
+    config = Config()
+
     workers = []
-    for i in range(MAX_THREAD_NUM):
-        ahr = AutoHomeRobot(target_url, name='Robot-{0}'.format(i))
+    for i in range(config.MAX_THREAD_NUM):
+        ahr = AutoHomeRobot(config.TARGET_URL, name='Robot-{0}'.format(i))
         workers.append(ahr)
         ahr.start()
 

@@ -15,7 +15,7 @@ logging.basicConfig(format=FORMAT)
 
 class Config(object):
 
-    MAX_THREAD_NUM = 2
+    MAX_THREAD_NUM = 4
     TARGET_URL = 'http://www.autohome.com.cn/692/'
 
 
